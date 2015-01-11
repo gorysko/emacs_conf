@@ -1,0 +1,30 @@
+
+;; ----- smex-history -----
+(
+ comment-region
+ make-directory
+ 4clojure-open-question
+ replace-string
+ replace-regexp
+ package-list-packages
+ occur
+)
+
+;; ----- smex-data -----
+(
+ (python-mode . 1)
+ (go-mode . 1)
+ (package-list-packages . 4)
+ (update-file-autoloads . 1)
+ (occur . 2)
+ (eval-region . 1)
+ (4clojure-open-question . 17)
+ (cider-jack-in . 1)
+ (4clojure-check-answers . 50)
+ (clojure-cheatsheet . 11)
+ (replace-regexp . 1)
+ (replace-string . 5)
+ (4clojure-next-question . 7)
+ (make-directory . 1)
+ (comment-region . 1)
+)

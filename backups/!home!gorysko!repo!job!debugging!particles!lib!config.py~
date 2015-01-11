@@ -1,0 +1,86 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""Configuration module."""
+
+# http://google-styleguide.googlecode.com/svn/trunk/pyguide.html
+# http://sourceforge.net/projects/pychecker/files/latest/download?source=files
+# http://www.pylint.org/#install
+
+import os
+import re
+
+CONFIG_FILE = '/etc/particles/__PRODUCT_VERSION__/particles.conf'
+CONFIG_DATA_PATH_KEY = 'data.path'
+CONFIG_TEMP_PATH_KEY = 'tmp.path'
+
+CRYPT_PHRASE = 'P455Phr453'
+
+# pylint: disable-msg=C0301
+STATUS_REMOVED = -1     # Removed status flag.
+STATUS_DISABLED = 0     # Synonym of suspended.
+STATUS_ACTIVE = 1       # Specifies active status for user, company, profile, etc.
+STATUS_RUNNING = 2      # Status of running action. (e.g. parsing log source.)
+STATUS_SCHEDULED = 3    # Status of scheduled action. (used by cronjob.)
+STATUS_ABANDONED = 4    # Specifies abandoned status for licenses.
+STATUS_PARSING = 5      # Specifies parsing status for sources
+STATUS_PARSED = 6       # Specifies parsed status for source
+STATUS_AGGREGATING = 7  # Specifies aggregating status for source
+
+
+LICENSE_TYPE_DEMO = 0
+LICENSE_TYPE_REGULAR = 1
+
+SOURCE_TYPE_LOCAL = 0  # Local log source type.
+SOURCE_TYPE_REMOTE = 1 # Remote log source type.
+SOURCE_TYPE_URCHIN = 2 # Urchin API source type.
+SOURCE_TYPE_GA = 3     # Google Analytics source type.
+
+TRACKING_METHOD_IPUA = 1 # Tracking by IP address and User Agent.
+TRACKING_METHOD_UTMI = 2 # Tracking by UTM image.
+
+ROLE_ADMIN = 1
+ROLE_MANAGER = 2
+ROLE_USER = 3
+
+USER_ROLES = (ROLE_ADMIN, ROLE_MANAGER, ROLE_USER)
+
+DEFAULT_ADMIN_EMAIL = 'admin@localhost'
+DEFAULT_ADMIN_PASSWORD = 'Str0ngPa55w0rd'
+DEFAULT_THEME = 0
+DEFAULT_COMPANY_ID = 0
+
+LC_API_DOMAINS = ('lc.particles.pro', 'lc2.particles.pro', 'lc3.particles.pro')
+LC_API_SCHEME = 'https'
+LC_API_PATH = '/api.cgi'
+
+LC_CMD_DISABLE = 0
+LC_CMD_ACTIVATE = 1
+LC_CMD_VALIDATE = 2
+
+DATE_FORMAT = '%Y-%m-%d'
+DATE_PATTERN = re.compile(r'^\d{4}\-\d{2}\-\d{2}$')
+
+FILTERS_EXCLUDE = 0
+FILTERS_INCLUDE = 1
+
+
+
+def get_value(name, default=None):
+    """Gets configuration property value by name from 'CONFIG_FILE'.
+
+    Args:
+        name: The property name.
+        default: Default value.
+
+    Returns:
+        Returns the value for 'name' if 'name' is exists, else 'default'.
+        If 'default' is not given, it defaults is 'None'.
+    """
+    if os.path.isfile(CONFIG_FILE):
+        for line in open(CONFIG_FILE).readlines():
+            if not line.strip().startswith('#'):
+                parts = line.split('=', 1)
+                if len(parts) == 2:
+                    if name == parts[0].strip():
+                        return parts[1].strip() or default
+    return default

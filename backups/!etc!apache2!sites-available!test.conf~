@@ -1,0 +1,71 @@
+# http://httpd.apache.org/docs/2.2/vhosts/name-based.html
+# Use name-based virtual hosting.
+# NameVirtualHost *:88888
+Listen *:8888
+
+<VirtualHost *:8888>
+    ServerAdmin root@localhost
+    ServerAlias x.particles.sethq.com
+    DocumentRoot "/home/gorysko/repo/job/debugging/particles/htdocs"
+    KeepAlive On
+    ServerSignature Off
+
+    ErrorLog /var/log/particles-x-error.log
+    CustomLog /var/log/particles-x-access.log combined
+
+    ErrorDocument 404 /404.html
+
+    <Directory />
+        Options Indexes FollowSymLinks MultiViews ExecCGI
+        AllowOverride All
+        AddHandler cgi-script .cgi
+	Require all granted
+    </Directory>
+
+    <IfModule mod_headers.c>
+        # 86400 = 1 day
+        # 604800 = 7 days
+        # 1209600 = 14 days
+        # 15778463 = 6 monthes
+        # 31556926 = 1 year
+        <FilesMatch "\.(xsl|js|css|txt|png|jpe?g|gif)$">
+            Header set Cache-Control "max-age=15778463, public"
+            FileETag None
+            Header unset ETag
+        </FilesMatch>
+        <LocationMatch "\.(xsl|js|css|txt|png|jpe?g|gif)$">
+            Header set Cache-Control "max-age=15778463, public"
+            FileETag None
+            Header unset ETag
+        </LocationMatch>
+        <FilesMatch "\.(html|xml)$">
+            Header set Cache-Control "max-age=86400, public"
+            FileETag None
+            Header unset ETag
+        </FilesMatch>
+        <LocationMatch "\.(html|xml)$">
+            Header set Cache-Control "max-age=86400, public"
+            FileETag None
+            Header unset ETag
+        </LocationMatch>
+    </IfModule>
+
+    <IfModule mod_deflate.c>
+        AddOutputFilterByType DEFLATE text/html text/css text/javascript
+    </IfModule>
+
+    <FilesMatch "\.(html|xml|xsl|js|css|txt)$">
+        AddDefaultCharset UTF-8
+        DefaultLanguage en-US
+    </FilesMatch>
+
+    <LocationMatch "\.(html|xml|xsl|js|css|txt)$">
+        AddDefaultCharset UTF-8
+        DefaultLanguage en-US
+    </LocationMatch>
+
+    <FilesMatch "\.(cgic|py|pyc)$">
+        Deny from all
+    </FilesMatch>
+
+</VirtualHost>

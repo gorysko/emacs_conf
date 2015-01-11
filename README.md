@@ -1,0 +1,3 @@
+My emacs conf
+needs pylint, pyflakes, rope, pymacs , yasnippet, paredit
+For comfort work, maybe I've forgotte smth...

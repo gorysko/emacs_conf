@@ -1,0 +1,529 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""Licensecenter api module."""
+# http://google-styleguide.googlecode.com/svn/trunk/pyguide.html
+# http://companyforge.net/projects/pychecker/files/latest/download?company=files
+
+import cgi
+import json
+import sys
+import time
+
+import companies
+import config
+import license_activation
+import users
+import products
+import sessions
+import logger
+import datetime
+
+
+# pylint: disable-msg=R0903
+class Api(object):
+    """Api class."""
+    def __init__(self):
+        self._session = sessions.Session()
+        self._form = cgi.FieldStorage()
+        self._responce = {'status': 200}
+
+    def Run(self):
+        """Runs api actions."""
+        user = self._get_current_user()
+        action = self._get_parameter('action')
+
+        if 'login' == action or 'auth.login' == action:
+            self._login()
+        elif 'setup' == action:
+            self._setup()
+        elif user:
+            actions = {
+                'auth.logout': self._logout,
+                'user.get': self._get_user,
+                'products.list': self._get_products,
+                'products.get': self._get_product,
+                'products.save': self._save_product,
+                'products.remove': self._remove_product,
+                'companies.list': self._list_companies,
+                'companies.get': self._get_company,
+                'companies.save': self._save_company,
+                'companies.remove': self._remove_company,
+                'user.save': self._user_save,
+                'user.remove': self._remove_user,
+                'users.list': self._list_of_users,
+                'history': self._get_history,
+                'product.reset' : self._reset_product
+            }
+
+            actions.get(action, self._bad_request)(user)
+
+        self._make_response(action)
+
+    def _bad_request(self, user):
+        """Creates standart bad request on action."""
+        if user:
+            self._responce = {'error': 'Bad request', 'status': 400}
+
+    def _get_parameter(self, name, default=None):
+        """Gets parameters from REST actions."""
+        value = self._form.getfirst(name, default)
+        return value and cgi.escape(str(value), True).replace('&amp;', '&')
+
+    def _get_int_parameter(self, name, default=None):
+        """Gets int parameters from REST actions."""
+        try:
+            return int(self._get_parameter(name, default))
+        except ValueError:
+            return default
+
+    def _get_history(self, user):
+        """Returns history of actions.
+
+        Args:
+            user: current logged in user.
+        """
+        product_key = self._get_parameter('product')
+        dates = []
+        end_date = datetime.datetime.now()
+        start_date = datetime.datetime.now() - datetime.timedelta(days=360)
+        while start_date <= end_date:
+            dates.append(start_date)
+            start_date += datetime.timedelta(1)
+        dates.append(end_date)
+
+        if users.is_app_admin(user):
+            if product_key:
+                data = logger.get_data(product_key, dates)
+            else:
+                data = logger.get_data('INFO', dates)
+            self._responce['result'] = data
+
+    def _activation(self):
+        """Activates regular license."""
+        product_key = self._get_parameter('product_key')
+        machine_key = self._get_parameter('machine_key')
+        license_type = self._get_parameter('license_type')
+        result = None
+        if machine_key:
+            if str(license_type) == str(config.LICENSE_TYPE_REGULAR) and product_key:
+                result = license_activation.activate_regular(product_key,
+                                                             machine_key)
+            elif str(license_type) == str(config.LICENSE_TYPE_DEMO):
+                result = license_activation.activate_demo(machine_key)
+            if result and 'result' in result:
+                self._log(None, result['result']['uuid'], result['result'])
+        self._responce = result or {'status': 400}
+
+    def _product_status(self):
+        """Gets current product status."""
+        product_key = self._get_parameter('product_key')
+        machine_key = self._get_parameter('machine_key')
+        product = products.get(product_key)
+        sys.stderr.write('machine_key %s\n' % machine_key)
+        if product and machine_key:
+            if machine_key == product.get('machine_key'):
+                self._responce = {'status': 200, 'product': product}
+            else:
+                self._responce = {'status': 404, 'error': 'Invalid license'}
+        else:
+            self._responce = {'status': 404, 'error': 'Invalid product key'}
+
+    def _make_response(self, action):
+        """Create response for action.
+
+        Args:
+            action: action identifier, as string.
+        """
+        data = None
+        # Unnecessary parens after u'print' keyword (superfluous-parens)
+        # pylint: disable-msg=C0325
+        print(sessions.get_header())
+        print('Content-Type: text/javascript;charset=utf-8\n\n')
+        if str(config.LC_CMD_ACTIVATE) == str(action):
+            self._activation()
+            try:
+                data = json.dumps(self._responce, ensure_ascii=False)
+            except ValueError:
+                data = json.dumps(self._responce)
+
+            print('%(data)s' % {'data': data})
+
+        elif str(config.LC_CMD_VALIDATE) == str(action):
+            self._product_status()
+            try:
+                data = json.dumps(self._responce, ensure_ascii=False)
+            except ValueError:
+                data = json.dumps(self._responce)
+
+            print('%(data)s' % {'data': data})
+        else:
+            try:
+                data = json.dumps(self._responce, ensure_ascii=False)
+            except ValueError:
+                data = json.dumps(self._responce)
+
+            print('%(cb)s(%(data)s);' % {'cb': self._get_parameter('cb'),
+                                         'data': data})
+
+    def _user_save(self, user):
+        """Saves user data.
+
+        Args:
+            user: current logged in user.
+        """
+        emails = self._get_parameter('email')
+        password = self._get_parameter('password')
+        roles = self._get_parameter('roles', str(config.ROLE_USER)).split(',')
+        newpass = self._get_parameter('new_password')
+        name = self._get_parameter('name')
+        company_id = self._get_parameter('company_id')
+        theme = self._get_parameter('theme', config.DEFAULT_THEME)
+        status = self._get_parameter('status')
+        is_app_admin = users.is_app_admin(user)
+        if is_app_admin:
+            if newpass and (emails == user.get('email') or is_app_admin):
+                result = users.api_change_passwd(emails, password, newpass)
+
+            if password and self._get_parameter('verify_password') and \
+                companies.is_valid(company_id):
+                company = companies.get(company_id)
+                result = users.api_create_user(emails, password, roles,
+                                                theme, company_id)
+                if 'error' not in result and company:
+                    company['users'].append(emails)
+                    companies.api_update_company(user=user,
+                                                users=company['users'],
+                                                uuid=company['uuid'])
+                    result = users.api_update_name(emails, name)
+                self._responce = result
+                return
+            if emails and name and password is None and \
+               users.is_app_admin(user):
+                sys.stderr.write('here')
+                result = users.api_update_name(emails, name)
+
+            if emails and status and password is None and \
+               users.is_app_admin(user):
+                result = users.api_status_update(emails, status)
+                self._log(user, 'INFO', None)
+                self._responce = {'status': result and 200 or 400}
+                return
+
+            if result:
+                self._log(user, 'INFO', None)
+                self._responce = result
+        self._responce = {'status': 400, 'error': 'You have no rights.'}
+
+
+
+    def _get_user(self, user):
+        """Gets user data.
+
+        Args:
+            user: current logged in user.
+        """
+        email = self._get_parameter('email')
+        user = email and users.get(email)
+        if user:
+            self._responce = {'status': 200, 'result': user}
+        else:
+            self._responce = {'status': 400, 'error': 'Bad request'}
+
+
+    def _list_of_users(self, user):
+        """Gets list of company users.
+
+        Args:
+            user: current logged in user.
+        """
+        company_id = self._get_parameter('company_id')
+        if users.is_app_admin(user):
+            self._responce = {'status': 200,
+                              'result': users.get_all(company_id)}
+        else:
+            self._responce = {'status': 200, 'result': [user]}
+
+
+    def _remove_user(self, cuser):
+        """Sets status config.STATUS_REMOVED to user.
+
+        Args:
+            cuser: current logged in user.
+        """
+        if users.is_app_admin(cuser):
+            emails = self._get_parameter('email')
+            if emails:
+                for email in emails.split(','):
+                    user = users.get(email)
+                    if user and 'company_id' in user:
+                        company = companies.get(user.get('company_id'))
+                        if company:
+                            if email and email != cuser.get('email') and \
+                                email not in company['contacts']:
+                                users.remove(email)
+                                self._log(cuser, 'INFO', None)
+                                return
+        self._responce = {'status': 400, 'error': 'Bad request'}
+
+
+    def _get_company(self, user):
+        """Gets company data.
+
+        Args:
+            user: current logged in user.
+        """
+        company_id = self._get_parameter('company_id')
+        company = companies.get_company(user, company_id)
+        if company:
+            self._responce['result'] = company
+        else:
+            self._responce = {'status': 404, 'error': 'Company not Found.'}
+
+    # pylint: disable-msg=R0914
+    def _save_company(self, user):
+        """Saves company data.
+
+        Args:
+            user: current logged in user.
+        """
+        status = self._get_int_parameter('status', 1)
+        site = self._get_parameter('site')
+        name = self._get_parameter('name')
+        uuids = self._get_parameter('uuid')
+        number = self._get_parameter('number')
+        address = self._get_parameter('address')
+        email = self._get_parameter('email')
+        cname = self._get_parameter('cname')
+        cmail = self._get_parameter('cmail')
+        city = self._get_parameter('city')
+        country = self._get_parameter('country')
+        zip_code = self._get_parameter('zipcode')
+        password = self._get_parameter('password')
+        roles = self._get_parameter('roles', str(config.ROLE_USER)).split(',')
+        if email and site and name and cname and cmail and password and roles:
+            result = companies.api_create_company(user, name, site, email,
+                                                  roles, password, cmail, cname)
+            self._responce = result
+            return
+
+        if uuids and status is None:
+            if cmail:
+                contacts = {'email': cmail}
+            else:
+                contacts = None
+            result = companies.api_update_company(user=user, name=name,
+                                                  site=site, address=address,
+                                                  number=number, email=email,
+                                                  city=city, country=country,
+                                                  zip_code=zip_code, uuid=uuids,
+                                                  contacts=contacts)
+            self._log(user, 'INFO', None)
+            self._responce = result
+            return
+        elif uuids and status > config.STATUS_REMOVED:
+            result = companies.api_change_status(user, uuids, status)
+            if result:
+                self._log(user, 'INFO', None)
+                self._responce = {'status': 200}
+                return
+        self._responce = {'status': 400, 'error': 'Invalid arguments.'}
+
+
+    def _remove_company(self, user):
+        """Sets config.STATUS_REMOVED to company.
+
+        Args:
+            user: current logged in user.
+        """
+        uuids = self._get_parameter('uuid')
+        if users.is_app_admin(user) and uuids != str(config.DEFAULT_COMPANY_ID):
+            result = companies.api_change_status(user, uuids,
+                                                config.STATUS_REMOVED)
+            if result:
+                self._responce = {'status': 200}
+                return
+        self._responce = {'status': 403, 'error': 'You can not remove company.'}
+
+
+    def _list_companies(self, user):
+        """Gets list of companies.
+
+        Args:
+            user: current logged in user.
+        """
+        self._responce['result'] = companies.get_all(user)
+
+
+    def _get_products(self, user):
+        """Gets list of products for one company.
+
+        Args:
+            user: current logged in user.
+        """
+        if user:
+            company_id = self._get_parameter('company_id')
+            self._responce['result'] = products.get_all(company_id)
+
+
+    def _get_product(self, user):
+        """Gets product data.
+
+        Args:
+            user: current logged in user.
+        """
+        product_id = self._get_parameter('uuid',
+                                         self._get_parameter('product_id'))
+        product = products.get_product(user, product_id)
+        if product:
+            self._responce['result'] = product
+            return
+        self._responce = {'status': 404, 'error': 'product Not Found.'}
+
+
+    def _remove_product(self, user):
+        """Sets config.STATUS_REMOVED for product.
+
+        Args:
+            user: current logged in user.
+        """
+        uids = self._get_parameter('uuid', self._get_parameter('product_id'))
+        if uids and users.is_app_admin(user):
+            products.api_change_status(uids, config.STATUS_REMOVED)
+            return
+        self._responce = {'status': 400, 'error': 'Bad request.'}
+
+
+    def _reset_product(self, user):
+        """Removes machine key from product data.
+
+        Args:
+            user: current logged in user.
+        """
+        uuids = self._get_parameter('uuid')
+        uuids = uuids.split(',')
+        if users.is_app_admin(user):
+            if products.api_reset_product(user, uuids):
+                self._responce = {'status': 200}
+                return
+        self._responce = {'status': 400, 'error': 'Bad request.'}
+
+
+    def _save_product(self, user):
+        """Saves product data.
+
+        Args:
+            user: current logged in user.
+        """
+        status = self._get_parameter('status', config.STATUS_RUNNING)
+        company_id = self._get_parameter('company_id')
+        profiles = self._get_parameter('profiles')
+        sources = self._get_parameter('sources')
+        ttl = self._get_parameter('ttl')
+        uuids = self._get_parameter('uuid', '')
+        times = int(self._get_parameter('times', 1))
+
+        if uuids and status:
+            result = products.api_change_status(uuids, status)
+            self._log(user, 'INFO', None)
+            if result:
+                self._responce = {'status': 200}
+                return
+
+        if companies.is_valid(company_id) and companies.get_company(user,
+                                                                    company_id):
+            results = []
+            while times:
+                result = products.api_save_product(user, company_id,
+                                                   profiles, sources, ttl,
+                                                   config.LICENSE_TYPE_REGULAR)
+                results += result
+                times -= 1
+            if results:
+                self._responce['result'] = results
+                return
+
+        self._responce = {'status': 400, 'error': 'Bad request.'}
+
+
+    def _login(self):
+        """Logs in user and saves session."""
+        user = users.auth(self._get_parameter('email'),
+                          self._get_parameter('passw'))
+        if user:
+            self._session['user'] = user['email']
+            user.pop('password', '')
+            user['roles'] = user['roles']
+            self._log(user, 'INFO', None)
+            self._responce = {'user': user, 'status': 200}
+            self._session.save()
+            return
+        self._responce = {'status': 401,
+                          'error': 'Login or password is incorrect.'}
+
+
+    def _logout(self, user):
+        """Logs out of user and clears user session.'
+
+        Args:
+            user: current logged in user.
+        """
+        if user:
+            self._session.pop('user', None)
+            self._session.destroy()
+
+
+    def _get_current_user(self):
+        """Gets logged-in user.
+
+        Return:
+            Returns User data as dict or None.
+        """
+        user = None
+        if 'user' in self._session:
+            user = users.get(self._session['user'])
+            if not user:
+                self._responce = {'status': 403, 'error': 'Invalid User.'}
+        else:
+            self._responce = {'status': 401, 'error': 'Not Authorized.'}
+        return user
+
+
+    def _log(self, user, key, data=None):
+        """Logs data.
+
+        Args:
+            key: The key of log type (e.g. 'license', 'history', 'action').
+            data: The data to log as dict.
+        """
+        data = data or {}
+        data['action'] = self._get_parameter('action', 'None')
+        data['user'] = user and user.get('email') or 'None'
+        data['reason'] = self._get_parameter('reason', '-')
+        logger.log(key, data)
+
+
+    def _setup(self):
+        """Application initial setup. Creates default user and company."""
+        if not users.get(config.DEFAULT_ADMIN_EMAIL):
+            user = {
+                'name' : 'admin',
+                'email': config.DEFAULT_ADMIN_EMAIL,
+                'roles': {'application': [config.ROLE_ADMIN],
+                          'company': ''},
+                'company_id': str(config.DEFAULT_COMPANY_ID)
+            }
+            company = {
+                'site' : 'webalitycs.com',
+                'email' : 'webalitycs@email',
+                'address' : 'webalitycs_address',
+                'users' : ['admin@localhost'],
+                'uuid' : str(config.DEFAULT_COMPANY_ID),
+                'products' : [],
+                'status' : config.STATUS_ACTIVE,
+                'name' : 'webalitycs',
+                'cdate' : int(time.time())
+            }
+            if users.set_password(user, config.DEFAULT_ADMIN_PASSWORD):
+                if users.put(user) and companies.save_company_data(user,
+                                                                    company):
+                    self._responce = {'status': 200}
