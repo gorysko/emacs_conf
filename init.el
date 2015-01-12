@@ -1,3 +1,10 @@
+(when (>= emacs-major-version 24)
+  (require 'package)
+  (package-initialize)
+  (add-to-list 'package-archives '("melpa" . "http://melpa.milkbox.net/packages/") t)
+  )
+
+
 (defconst emacs-d
   (file-name-directory (or load-file-name
                            (when (boundp 'bytecomp-filename) bytecomp-filename)
@@ -15,11 +22,11 @@
                  )
   (add-to-list 'load-path (concat emacs-d relpath)))
 
-(defun toggle-fullscreen ()
-  (interactive)
-  (x-send-client-message nil 0 nil "_NET_WM_STATE" 32 '(2 "_NET_WM_STATE_MAXIMIZED_VERT" 0))
-  (x-send-client-message nil 0 nil "_NET_WM_STATE" 32 '(2 "_NET_WM_STATE_MAXIMIZED_HORZ" 0)))
-(toggle-fullscreen)
+;; (defun toggle-fullscreen ()
+;;   (interactive)
+;;   (x-send-client-message nil 0 nil "_NET_WM_STATE" 32 '(2 "_NET_WM_STATE_MAXIMIZED_VERT" 0))
+;;   (x-send-client-message nil 0 nil "_NET_WM_STATE" 32 '(2 "_NET_WM_STATE_MAXIMIZED_HORZ" 0)))
+;; (toggle-fullscreen)
 
 ;;Provide python-dev-mode
 (require 'python-dev-mode (concat emacs-d "init/python-dev-mode.el"))
@@ -38,10 +45,11 @@
 
 ;; Provide go-lang mode
 (add-to-list 'load-path "exten/go")
-(require 'go-mode-load)
+(require 'go-mode)
 
 ;; Do not show message at start
-(setq inhibit-startup-message t)
+;;(setq inhibit-startup-message t)
+
 ;; 'y' for 'yes
 (fset 'yes-or-no-p 'y-or-n-p)
 
