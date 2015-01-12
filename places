@@ -1,3 +1,7 @@
 ;;; -*- coding: utf-8 -*-
-(("/Users/igor/.emacs.d/elpa/go-mode-20141127.2206/go-mode-autoloads.el" . 2940)
- ("/Users/igor/.emacs.d/init.el" . 1710))
+(("/Users/igor/.emacs.d/elpa/go-autocomplete-20141210.1904/go-autocomplete-autoloads.el" . 202)
+ ("/Users/igor/.emacs.d/elpa/go-mode-20141127.2206/go-mode-autoloads.el" . 2940)
+ ("/Users/igor/.emacs.d/elpa/py-autopep8-20140908.31/py-autopep8-autoloads.el" . 523)
+ ("/Users/igor/.emacs.d/elpa/pylint-20140729.1117/pylint-autoloads.el" . 785)
+ ("/Users/igor/.emacs.d/init.el" . 1010)
+ ("/Users/igor/repo/go/exercises/arrays.go" . 133))
